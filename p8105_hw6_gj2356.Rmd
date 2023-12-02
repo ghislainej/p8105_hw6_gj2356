@@ -19,7 +19,7 @@ knitr::opts_chunk$set(
 
 ## Problem 1
 The code chunk below loads the Washington Post homicide data and creates a new variable `city_state` that combines the city and state into one variable, and a new binary variable `status` that indicates if the homicide is solved or unsolved. 
-```{r, warning = FALSE}
+```{r, warning = FALSE, message = FALSE}
 homicide =
   read_csv("homicide-data.csv") |> 
   janitor::clean_names() |> 
@@ -38,7 +38,7 @@ Create a city_state variable (e.g. “Baltimore, MD”), and a binary variable i
 
 For the city of Baltimore, MD, use the glm function to fit a logistic regression with resolved vs unresolved as the outcome and victim age, sex and race as predictors. Save the output of glm as an R object; apply the broom::tidy to this object; and obtain the estimate and confidence interval of the adjusted odds ratio for solving homicides comparing male victims to female victims keeping all other variables fixed.
 
-```{r}
+```{r, warning = FALSE}
 baltimore_fit = 
   homicide |> 
   filter(city_state == "Baltimore, MD") |> 
@@ -47,7 +47,7 @@ baltimore_fit =
 broom::tidy(baltimore_fit)
 ```
 
-OR = 1.04
+estimate = 1.04
 
 ```{r}
 
@@ -59,7 +59,7 @@ Create a plot that shows the estimated ORs and CIs for each city. Organize citie
 
 ## Problem 2
 
-```{r}
+```{r, warning = FALSE}
 weather_df = 
   rnoaa::meteo_pull_monitors(
     c("USW00094728"),
@@ -83,7 +83,7 @@ Use 5000 bootstrap samples and, for each bootstrap sample, produce estimates of 
 . Note: broom::glance() is helpful for extracting r̂ 2
  from a fitted regression, and broom::tidy() (with some additional wrangling) should help in computing log(β̂ 1∗β̂ 2)
 
-```{r}
+```{r, warning = FALSE}
 weather_bootstrap_data = 
 weather_df |> 
   modelr::bootstrap(n = 5000) |> 
@@ -107,7 +107,7 @@ weather_df |>
 ```
 
 ### Distribution of R-Squared Values
-```{r}
+```{r, warning = FALSE}
 r_squared_distribution =
   weather_bootstrap_data |> 
   ggplot(aes(x = r.squared)) + 
@@ -127,7 +127,7 @@ log_beta_beta_distribution
 ```
 
 
-```{r}
+```{r, warning = FALSE}
 weather_bootstrap_data |> 
   summarize(
     ci_lower_rsquared = quantile(r.squared, 0.025), 
@@ -139,7 +139,8 @@ weather_bootstrap_data |>
 
 ## Problem 3
 
-```{r}
+The code chunk below loads and cleans the `birthweight.csv` dataset. Sex (`babysex`), father's race(`frace`), and mother's race (`mrace`) were converted to factors.
+```{r, warning = FALSE}
 birthweight_data =  
   read_csv("birthweight.csv") |> 
   janitor::clean_names() |> 
@@ -150,13 +151,32 @@ birthweight_data =
   )
 
 skimr::skim(birthweight_data)
-
-birthweight_data |> 
-  ggplot(aes(x = bwt)) + geom_boxplot()
 ```
 
+The code chunk below creates a histogram and boxplot of the birthweights.
+```{r, warning = FALSE}
+birthweight_data |>
+  ggplot(aes(x = bwt)) + 
+  geom_histogram(color = "black", fill = "turquoise", alpha = 0.5) +
+  labs(
+    title = "Distribution of Birthweights",
+    x = "Birthweight (grams)",
+    y = "Count"
+  )
 
-```{r}
+birthweight_data |> 
+  ggplot(aes(x = bwt)) + 
+  geom_boxplot(color = "black", fill = "turquoise", alpha = 0.5) +
+  labs(
+    title = "Distribution of Birthweights",
+    x = "Birthweight (grams)" 
+  )
+```
+Looking at the histogram of birthweights, it looks approximately normally distributed. Then looking at the boxplot of the birthweights, there are a few outliers on each end of the data. The outliers will likely impact our model and our residuals.
+
+
+When building this model, I started with only two variables: baby's head circumference at birth (`bhead`) and baby's length at birth (`blength`), which ended up being the two covariates that I settled on for my final model. I considered that the length of the baby as well as its head circumference would be very indicative of the overall birthweight of the baby. I played around with adding other variables, but it did not add much in terms of changing the r-squared value and at times lowered my r-squared value. Therefore, I decided to stick with just the two variables to keep the model as simple as possible while maintaining a high r-squared value.
+```{r, warning = FALSE}
 birthweight_model_1 = 
   lm(bwt ~ bhead + blength, data = birthweight_data)
 
@@ -164,19 +184,35 @@ broom::glance(birthweight_model_1)
 broom::tidy(birthweight_model_1)
 ```
 
-
-```{r}
+The code chunk below creates a scatterplot of the residuals agains the predicted values and creates a histogram of the residuals. 
+```{r, warning = FALSE}
 birthweight_data |> 
   modelr::add_residuals(birthweight_model_1) |> 
   modelr::add_predictions(birthweight_model_1) |> 
-  ggplot(aes(x = pred, y = resid)) + geom_point()
+  ggplot(aes(x = pred, y = resid)) + 
+  geom_point(color = "turquoise", alpha = 0.5) +
+  labs(
+    title = "Scatterplot of Residuals Against Predicted Values",
+    x= "Predicted Values",
+    y= "Residuals"
+  )
 
 birthweight_data |> 
   modelr::add_residuals(birthweight_model_1) |> 
-  ggplot(aes(x = resid)) + geom_histogram()
+  ggplot(aes(x = resid)) + 
+  geom_histogram(color = "black", fill = "turquoise", alpha = 0.5) +
+  labs(
+    title = "Distribution of Residuals",
+    x = "Residuals",
+    y = "Count"
+  )
 ```
+The scatterplot of the residuals against the predicted values shows most of the residuals randomly clustering around 0, which is a good sign for the model. There is evidence of a few outliers on both ends, but the original dataset contained quite a few outliers and without doing more investigation and analysis there is not much that can be done.
 
-```{r}
+The histogram shows that the residuals are approximately normally distributed, which is further evidence that the model is doing a decent job of fitting the data.
+
+The code chunk below creates a model using length at birth and gestational age as predictors of birthweight.
+```{r, warning = FALSE}
 birthweight_model_2 =
   lm(bwt ~ blength + gaweeks, data = birthweight_data)
 
@@ -184,15 +220,17 @@ broom::glance(birthweight_model_2)
 broom::tidy(birthweight_model_2)
 ```
 
-```{r}
+The code chunk below creates a model using baby's head circumference, baby's length, the baby's sex, and all the interactions as predictors of birthweight. 
+```{r, warning = FALSE}
 birthweight_model_3 =
-  lm(bwt ~ bhead + blength + babysex + bhead*blength + bhead*babysex + blength*babysex + bhead*blength*babysex, data = birthweight_data)
+  lm(bwt ~ bhead + blength + babysex + bhead*blength*babysex, data = birthweight_data)
 
 broom::glance(birthweight_model_3)
 broom::tidy(birthweight_model_3)
 ```
 
-```{r}
+The code chunk below generates 100 cross-validation folds for the `birthweight_data` and splits that data into training and testing sets. 
+```{r, warning = FALSE}
 cv_birthweight_df =
   crossv_mc(birthweight_data, 100) |> 
   mutate(
@@ -200,8 +238,8 @@ cv_birthweight_df =
     test = map(test, as_tibble))
 ```
 
-
-```{r}
+The code chunk below performs cross-validated linear regression modeling on the `birthweight_data`, assessing the root mean squared error (RSME) for the three models created. This allows us to assess which models are doing a good job at predicting our data.
+```{r, warning = FALSE}
 cv_birthweight_df = 
   cv_birthweight_df |> 
   mutate(
@@ -214,7 +252,8 @@ cv_birthweight_df =
     rmse_3 = map2_dbl(birthweight_model_3, test, \(mod, df) rmse(model = mod, data = df)))
 ```
 
-```{r}
+The code chunk below creates a violin plots for each of the models. 
+```{r, warning = FALSE}
 cv_birthweight_df |> 
   select(starts_with("rmse")) |> 
   pivot_longer(
@@ -223,43 +262,13 @@ cv_birthweight_df |>
     values_to = "rmse",
     names_prefix = "rmse_") |> 
   mutate(model = fct_inorder(model)) |> 
-  ggplot(aes(x = model, y = rmse)) + geom_violin()
+  ggplot(aes(x = model, y = rmse)) + 
+    geom_violin(fill = "turquoise", alpha = 0.5) +
+    labs(
+      x = "Model",
+      y = "Root Mean Squared Error (RMSE)"
+    )
 ```
 
-One using head circumference, length, sex, and all interactions (including the three-way interaction) between these
-
-In this problem, you will analyze data gathered to understand the effects of several variables on a child’s birthweight. This dataset, available here, consists of roughly 4000 children and includes the following variables:
-
-babysex: baby’s sex (male = 1, female = 2)
-bhead: baby’s head circumference at birth (centimeters)
-blength: baby’s length at birth (centimeteres)
-bwt: baby’s birth weight (grams)
-delwt: mother’s weight at delivery (pounds)
-fincome: family monthly income (in hundreds, rounded)
-frace: father’s race (1 = White, 2 = Black, 3 = Asian, 4 = Puerto Rican, 8 = Other, 9 = Unknown)
-gaweeks: gestational age in weeks
-malform: presence of malformations that could affect weight (0 = absent, 1 = present)
-menarche: mother’s age at menarche (years)
-mheigth: mother’s height (inches)
-momage: mother’s age at delivery (years)
-mrace: mother’s race (1 = White, 2 = Black, 3 = Asian, 4 = Puerto Rican, 8 = Other)
-parity: number of live births prior to this pregnancy
-pnumlbw: previous number of low birth weight babies
-pnumgsa: number of prior small for gestational age babies
-ppbmi: mother’s pre-pregnancy BMI
-ppwt: mother’s pre-pregnancy weight (pounds)
-smoken: average number of cigarettes smoked per day during pregnancy
-wtgain: mother’s weight gain during pregnancy (pounds)
-
-Load and clean the data for regression analysis (i.e. convert numeric to factor where appropriate, check for missing data, etc.).
-
-Propose a regression model for birthweight. This model may be based on a hypothesized structure for the factors that underly birthweight, on a data-driven model-building process, or a combination of the two. Describe your modeling process and show a plot of model residuals against fitted values – use add_predictions and add_residuals in making this plot.
-
-Compare your model to two others:
-
-One using length at birth and gestational age as predictors (main effects only)
-One using head circumference, length, sex, and all interactions (including the three-way interaction) between these
-Make this comparison in terms of the cross-validated prediction error; use crossv_mc and functions in purrr as appropriate.
-
-Note that although we expect your model to be reasonable, model building itself is not a main idea of the course and we don’t necessarily expect your model to be “optimal”.
+Looking at this plot, Model 1 and Model 3 have roughly similar prediction accuracies, while Model 2 has the worse prediction accuracy. Model 3 includes 7 predictors (3 main effects) and only appears to only be slightly better at predicting birthweight than Model 1 which contains 2 predictors (main effects only). 
 
