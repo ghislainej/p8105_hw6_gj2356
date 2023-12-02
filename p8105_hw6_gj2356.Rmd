@@ -5,9 +5,14 @@ date: "2023-12-01"
 output: github_document
 ---
 
-```{r}
+```{r, include = FALSE}
 library(tidyverse)
 set.seed(123)
+knitr::opts_chunk$set(
+  fig.width = 6,
+  fig.asp = .6,
+  out.width = "90%"
+)
 ```
 
 
@@ -95,33 +100,38 @@ weather_df |>
   select(r.squared, results_beta, id) |> 
   unnest(results_beta) |> 
   select(id, r.squared, term, estimate) |> 
-  pivot_wider(names_from = term, values_from = estimate)
-
-log_beta_beta =
-  weather_bootstrap_data |> 
+  pivot_wider(names_from = term, values_from = estimate) |> 
   mutate(
     beta_beta = tmin*prcp,
     log_beta_beta = log(beta_beta)
-  )
+  ) 
 ```
 
+### Distribution of R-Squared Values
 ```{r}
-testing = weather_df |> 
-  modelr::bootstrap(n = 100) |> 
-  mutate(models = map(strap, \(df) lm(tmax ~ tmin + prcp, data = df)),
-         results = map(models, broom::tidy)) |> 
-  select(results) |> 
-  mutate(
-    id = row_number()
-  ) |> 
-  unnest(results) |> 
-  select(id, term, estimate) |> 
-  pivot_wider(names_from = term, values_from = estimate)
+r_squared_distribution =
+  weather_bootstrap_data |> 
+  ggplot(aes(x = r.squared)) + geom_density()
+r_squared_distribution
+```
+
+### Distribution of Log(beta1*beta2) Values
+```{r, warning = FALSE}
+log_beta_beta_distribution =
+  weather_bootstrap_data |> 
+  ggplot(aes(x = log_beta_beta)) + geom_density()
+
+log_beta_beta_distribution
 ```
 
 
 ```{r}
-
+weather_bootstrap_data |> 
+  summarize(
+    ci_lower_rsquared = quantile(r.squared, 0.025), 
+    ci_upper_rsquared = quantile(r.squared, 0.975),
+    ci_lower_logbetabeta = quantile(log_beta_beta, 0.025, na.rm = TRUE),
+    ci_upper_logbetabeta = quantile(log_beta_beta, 0.975, na.rm = TRUE))
 ```
 
 ## Problem 3
