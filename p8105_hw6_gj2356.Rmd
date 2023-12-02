@@ -7,6 +7,8 @@ output: github_document
 
 ```{r, include = FALSE}
 library(tidyverse)
+library(modelr)
+library(mgcv)
 set.seed(123)
 knitr::opts_chunk$set(
   fig.width = 6,
@@ -15,12 +17,9 @@ knitr::opts_chunk$set(
 )
 ```
 
-
 ## Problem 1
-The Washington Post has gathered data on homicides in 50 large U.S. cities and made the data available through a GitHub repository here. You can read their accompanying article here.
-
 The code chunk below loads the Washington Post homicide data and creates a new variable `city_state` that combines the city and state into one variable, and a new binary variable `status` that indicates if the homicide is solved or unsolved. 
-```{r}
+```{r, warning = FALSE}
 homicide =
   read_csv("homicide-data.csv") |> 
   janitor::clean_names() |> 
@@ -29,11 +28,11 @@ homicide =
     status = case_match(disposition,
                        "Open/No arrest" ~ 1,
                        .default = 0),
-    victim_age = as.numeric(victim_age)) |> 
+    victim_age = as.numeric(victim_age),
+    victim_race = as.factor(victim_race)) |> 
   filter(!city_state %in% c("Dallas, TX","Phoenix, AZ", "Kansas City, MO","Tulsa, AL"),
          victim_race %in% c("White", "Black")) 
 ```
-
 
 Create a city_state variable (e.g. “Baltimore, MD”), and a binary variable indicating whether the homicide is solved. Omit cities Dallas, TX; Phoenix, AZ; and Kansas City, MO – these don’t report victim race. Also omit Tulsa, AL – this is a data entry mistake. For this problem, limit your analysis those for whom victim_race is white or black. Be sure that victim_age is numeric.
 
@@ -111,7 +110,9 @@ weather_df |>
 ```{r}
 r_squared_distribution =
   weather_bootstrap_data |> 
-  ggplot(aes(x = r.squared)) + geom_density()
+  ggplot(aes(x = r.squared)) + 
+    geom_density() +
+    labs(title = "Distribution of R-Squared")
 r_squared_distribution
 ```
 
@@ -119,8 +120,9 @@ r_squared_distribution
 ```{r, warning = FALSE}
 log_beta_beta_distribution =
   weather_bootstrap_data |> 
-  ggplot(aes(x = log_beta_beta)) + geom_density()
-
+  ggplot(aes(x = log_beta_beta)) + 
+    geom_density() + 
+    labs(title = "Distribution of log(beta1*beta2)")
 log_beta_beta_distribution
 ```
 
@@ -131,10 +133,101 @@ weather_bootstrap_data |>
     ci_lower_rsquared = quantile(r.squared, 0.025), 
     ci_upper_rsquared = quantile(r.squared, 0.975),
     ci_lower_logbetabeta = quantile(log_beta_beta, 0.025, na.rm = TRUE),
-    ci_upper_logbetabeta = quantile(log_beta_beta, 0.975, na.rm = TRUE))
+    ci_upper_logbetabeta = quantile(log_beta_beta, 0.975, na.rm = TRUE)) |> 
+  knitr::kable()
 ```
 
 ## Problem 3
+
+```{r}
+birthweight_data =  
+  read_csv("birthweight.csv") |> 
+  janitor::clean_names() |> 
+  mutate(
+    babysex = factor(babysex),
+    frace = factor(frace),
+    mrace = factor(mrace)
+  )
+
+skimr::skim(birthweight_data)
+
+birthweight_data |> 
+  ggplot(aes(x = bwt)) + geom_boxplot()
+```
+
+
+```{r}
+birthweight_model_1 = 
+  lm(bwt ~ bhead + blength, data = birthweight_data)
+
+broom::glance(birthweight_model_1)
+broom::tidy(birthweight_model_1)
+```
+
+
+```{r}
+birthweight_data |> 
+  modelr::add_residuals(birthweight_model_1) |> 
+  modelr::add_predictions(birthweight_model_1) |> 
+  ggplot(aes(x = pred, y = resid)) + geom_point()
+
+birthweight_data |> 
+  modelr::add_residuals(birthweight_model_1) |> 
+  ggplot(aes(x = resid)) + geom_histogram()
+```
+
+```{r}
+birthweight_model_2 =
+  lm(bwt ~ blength + gaweeks, data = birthweight_data)
+
+broom::glance(birthweight_model_2)
+broom::tidy(birthweight_model_2)
+```
+
+```{r}
+birthweight_model_3 =
+  lm(bwt ~ bhead + blength + babysex + bhead*blength + bhead*babysex + blength*babysex + bhead*blength*babysex, data = birthweight_data)
+
+broom::glance(birthweight_model_3)
+broom::tidy(birthweight_model_3)
+```
+
+```{r}
+cv_birthweight_df =
+  crossv_mc(birthweight_data, 100) |> 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble))
+```
+
+
+```{r}
+cv_birthweight_df = 
+  cv_birthweight_df |> 
+  mutate(
+    birthweight_model_1  = map(train, \(df) lm(bwt ~ bhead + blength, data = birthweight_data)),
+    birthweight_model_2  = map(train, \(df) lm(bwt ~ blength + gaweeks, data = birthweight_data)),
+    birthweight_model_3  = map(train, \(df) lm(bwt ~ bhead + blength + babysex + bhead*blength + bhead*babysex + blength*babysex + bhead*blength*babysex, data = birthweight_data))) |> 
+  mutate(
+    rmse_1 = map2_dbl(birthweight_model_1, test, \(mod, df) rmse(model = mod, data = df)),
+    rmse_2 = map2_dbl(birthweight_model_2, test, \(mod, df) rmse(model = mod, data = df)),
+    rmse_3 = map2_dbl(birthweight_model_3, test, \(mod, df) rmse(model = mod, data = df)))
+```
+
+```{r}
+cv_birthweight_df |> 
+  select(starts_with("rmse")) |> 
+  pivot_longer(
+    everything(),
+    names_to = "model", 
+    values_to = "rmse",
+    names_prefix = "rmse_") |> 
+  mutate(model = fct_inorder(model)) |> 
+  ggplot(aes(x = model, y = rmse)) + geom_violin()
+```
+
+One using head circumference, length, sex, and all interactions (including the three-way interaction) between these
+
 In this problem, you will analyze data gathered to understand the effects of several variables on a child’s birthweight. This dataset, available here, consists of roughly 4000 children and includes the following variables:
 
 babysex: baby’s sex (male = 1, female = 2)
@@ -157,6 +250,7 @@ ppbmi: mother’s pre-pregnancy BMI
 ppwt: mother’s pre-pregnancy weight (pounds)
 smoken: average number of cigarettes smoked per day during pregnancy
 wtgain: mother’s weight gain during pregnancy (pounds)
+
 Load and clean the data for regression analysis (i.e. convert numeric to factor where appropriate, check for missing data, etc.).
 
 Propose a regression model for birthweight. This model may be based on a hypothesized structure for the factors that underly birthweight, on a data-driven model-building process, or a combination of the two. Describe your modeling process and show a plot of model residuals against fitted values – use add_predictions and add_residuals in making this plot.
