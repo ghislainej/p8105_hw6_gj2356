@@ -18,6 +18,7 @@ knitr::opts_chunk$set(
 ```
 
 ## Problem 1
+
 The code chunk below loads the Washington Post homicide data and creates a new variable `city_state` that combines the city and state into one variable, and a new binary variable `status` that indicates if the homicide is solved or unsolved. 
 ```{r, warning = FALSE, message = FALSE}
 homicide =
@@ -34,33 +35,28 @@ homicide =
          victim_race %in% c("White", "Black")) 
 ```
 
-Create a city_state variable (e.g. “Baltimore, MD”), and a binary variable indicating whether the homicide is solved. Omit cities Dallas, TX; Phoenix, AZ; and Kansas City, MO – these don’t report victim race. Also omit Tulsa, AL – this is a data entry mistake. For this problem, limit your analysis those for whom victim_race is white or black. Be sure that victim_age is numeric.
-
-For the city of Baltimore, MD, use the glm function to fit a logistic regression with resolved vs unresolved as the outcome and victim age, sex and race as predictors. Save the output of glm as an R object; apply the broom::tidy to this object; and obtain the estimate and confidence interval of the adjusted odds ratio for solving homicides comparing male victims to female victims keeping all other variables fixed.
-
+The code chunk below fits a logistic regression with solved/unsolved as the outcome and victim age, sex, and race as predictors. 
 ```{r, warning = FALSE}
 baltimore_fit = 
   homicide |> 
   filter(city_state == "Baltimore, MD") |> 
   glm(status ~ victim_age + victim_sex + victim_race, data = _, family = binomial())
 
-broom::tidy(baltimore_fit)
+broom::tidy(baltimore_fit) |> 
+  mutate(
+    OR = exp(estimate),
+    lower_CI = exp(estimate - (1.96*std.error)),
+    upper_CI = exp(estimate + (1.96*std.error))
+  ) |> 
+  knitr::kable()
 ```
 
-estimate = 1.04
-
-```{r}
-
-```
-
-Now run glm for each of the cities in your dataset, and extract the adjusted odds ratio (and CI) for solving homicides comparing male victims to female victims. Do this within a “tidy” pipeline, making use of purrr::map, list columns, and unnest as necessary to create a dataframe with estimated ORs and CIs for each city.
-
-Create a plot that shows the estimated ORs and CIs for each city. Organize cities according to estimated OR, and comment on the plot.
+Adjusting for age and race, homicides that involve males have 2.82 times the odds (95% CI: 2.13, 3.73) of being solved compared to homicides that involve females.
 
 ## Problem 2
 
 The code chunk below loads in the weather data and creates a new dataframe `weather_df`.
-```{r, warning = FALSE}
+```{r, warning = FALSE, message = FALSE}
 weather_df = 
   rnoaa::meteo_pull_monitors(
     c("USW00094728"),
@@ -120,7 +116,7 @@ log_beta_beta_distribution =
   weather_bootstrap_data |> 
   ggplot(aes(x = log_beta_beta)) + 
     geom_density() + 
-    labs(title = "Distribution of log(beta1*beta2)")
+    labs(title = "Distribution of log(β1*β2)")
 log_beta_beta_distribution
 ```
 
@@ -134,13 +130,13 @@ weather_bootstrap_data |>
     ci_upper_rsquared = quantile(r.squared, 0.975),
     ci_lower_logbetabeta = quantile(log_beta_beta, 0.025, na.rm = TRUE),
     ci_upper_logbetabeta = quantile(log_beta_beta, 0.975, na.rm = TRUE)) |> 
-  knitr::kable()
+  knitr::kable(digits = 4)
 ```
 
 ## Problem 3
 
 The code chunk below loads and cleans the `birthweight.csv` dataset. Sex (`babysex`), father's race(`frace`), and mother's race (`mrace`) were converted to factors.
-```{r, warning = FALSE}
+```{r, warning = FALSE, message = FALSE}
 birthweight_data =  
   read_csv("birthweight.csv") |> 
   janitor::clean_names() |> 
@@ -154,7 +150,7 @@ skimr::skim(birthweight_data)
 ```
 
 The code chunk below creates a histogram and boxplot of the birthweights.
-```{r, warning = FALSE}
+```{r, warning = FALSE, message = FALSE}
 birthweight_data |>
   ggplot(aes(x = bwt)) + 
   geom_histogram(color = "black", fill = "turquoise", alpha = 0.5) +
@@ -180,12 +176,12 @@ When building this model, I started with only two variables: baby's head circumf
 birthweight_model_1 = 
   lm(bwt ~ bhead + blength, data = birthweight_data)
 
-broom::glance(birthweight_model_1)
-broom::tidy(birthweight_model_1)
+broom::glance(birthweight_model_1) |> knitr::kable(digits = 3)
+broom::tidy(birthweight_model_1) |> knitr::kable(digits = 3)
 ```
 
 The code chunk below creates a scatterplot of the residuals agains the predicted values and creates a histogram of the residuals. 
-```{r, warning = FALSE}
+```{r, warning = FALSE, message = FALSE}
 birthweight_data |> 
   modelr::add_residuals(birthweight_model_1) |> 
   modelr::add_predictions(birthweight_model_1) |> 
@@ -216,8 +212,8 @@ The code chunk below creates a model using length at birth and gestational age a
 birthweight_model_2 =
   lm(bwt ~ blength + gaweeks, data = birthweight_data)
 
-broom::glance(birthweight_model_2)
-broom::tidy(birthweight_model_2)
+broom::glance(birthweight_model_2) |> knitr::kable(digits = 3)
+broom::tidy(birthweight_model_2) |> knitr::kable(digits = 3)
 ```
 
 The code chunk below creates a model using baby's head circumference, baby's length, the baby's sex, and all the interactions as predictors of birthweight. 
@@ -225,8 +221,8 @@ The code chunk below creates a model using baby's head circumference, baby's len
 birthweight_model_3 =
   lm(bwt ~ bhead + blength + babysex + bhead*blength*babysex, data = birthweight_data)
 
-broom::glance(birthweight_model_3)
-broom::tidy(birthweight_model_3)
+broom::glance(birthweight_model_3) |> knitr::kable(digits = 3)
+broom::tidy(birthweight_model_3) |> knitr::kable(digits = 3)
 ```
 
 The code chunk below generates 100 cross-validation folds for the `birthweight_data` and splits that data into training and testing sets. 
