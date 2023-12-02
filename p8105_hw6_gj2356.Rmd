@@ -5,34 +5,57 @@ date: "2023-12-01"
 output: github_document
 ---
 
-## Problem 0
-This “problem” focuses on structure of your submission, especially the use git and GitHub for reproducibility, R Projects to organize your work, R Markdown to write reproducible reports, relative paths to load data from local files, and reasonable naming structures for your files. To that end:
+```{r}
+library(tidyverse)
+set.seed(123)
+```
 
-* create a public GitHub repo + local R Project; we suggest naming this repo / directory p8105_hw6_YOURUNI (e.g. p8105_hw6_ajg2202 for Jeff), but that’s not required
-* create a single .Rmd file named p8105_hw6_YOURUNI.Rmd that renders to github_document
-* create a subdirectory to store the local data files used in the assignment, and use relative paths to access these data files
-* submit a link to your repo via Courseworks
-
-Your solutions to Problems 1 and 2 should be implemented in your .Rmd file, and your git commit history should reflect the process you used to solve these Problems.
-
-For this Problem, we will assess adherence to the instructions above regarding repo structure, git commit history, and whether we are able to knit your .Rmd to ensure that your work is reproducible. Adherence to appropriate styling and clarity of code will be assessed in Problems 1+ using the style rubric.
-
-This homework includes figures; the readability of your embedded plots (e.g. font sizes, axis labels, titles) will be assessed in Problems 1+.
 
 ## Problem 1
 The Washington Post has gathered data on homicides in 50 large U.S. cities and made the data available through a GitHub repository here. You can read their accompanying article here.
 
+The code chunk below loads the Washington Post homicide data and creates a new variable `city_state` that combines the city and state into one variable, and a new binary variable `status` that indicates if the homicide is solved or unsolved. 
+```{r}
+homicide =
+  read_csv("homicide-data.csv") |> 
+  janitor::clean_names() |> 
+  mutate(
+    city_state = paste(city, state, sep = ", "),
+    status = case_match(disposition,
+                       "Open/No arrest" ~ 1,
+                       .default = 0),
+    victim_age = as.numeric(victim_age)) |> 
+  filter(!city_state %in% c("Dallas, TX","Phoenix, AZ", "Kansas City, MO","Tulsa, AL"),
+         victim_race %in% c("White", "Black")) 
+```
+
+
 Create a city_state variable (e.g. “Baltimore, MD”), and a binary variable indicating whether the homicide is solved. Omit cities Dallas, TX; Phoenix, AZ; and Kansas City, MO – these don’t report victim race. Also omit Tulsa, AL – this is a data entry mistake. For this problem, limit your analysis those for whom victim_race is white or black. Be sure that victim_age is numeric.
 
 For the city of Baltimore, MD, use the glm function to fit a logistic regression with resolved vs unresolved as the outcome and victim age, sex and race as predictors. Save the output of glm as an R object; apply the broom::tidy to this object; and obtain the estimate and confidence interval of the adjusted odds ratio for solving homicides comparing male victims to female victims keeping all other variables fixed.
+
+```{r}
+baltimore_fit = 
+  homicide |> 
+  filter(city_state == "Baltimore, MD") |> 
+  glm(status ~ victim_age + victim_sex + victim_race, data = _, family = binomial())
+
+broom::tidy(baltimore_fit)
+```
+
+OR = 1.04
+
+```{r}
+
+```
 
 Now run glm for each of the cities in your dataset, and extract the adjusted odds ratio (and CI) for solving homicides comparing male victims to female victims. Do this within a “tidy” pipeline, making use of purrr::map, list columns, and unnest as necessary to create a dataframe with estimated ORs and CIs for each city.
 
 Create a plot that shows the estimated ORs and CIs for each city. Organize cities according to estimated OR, and comment on the plot.
 
 ## Problem 2
-For this problem, we’ll use the Central Park weather data similar to data we’ve seen elsewhere. The code chunk below (adapted from the course website) will download these data.
 
+```{r}
 weather_df = 
   rnoaa::meteo_pull_monitors(
     c("USW00094728"),
@@ -44,15 +67,62 @@ weather_df =
     tmin = tmin / 10,
     tmax = tmax / 10) |>
   select(name, id, everything())
+```
+
 The boostrap is helpful when you’d like to perform inference for a parameter / value / summary that doesn’t have an easy-to-write-down distribution in the usual repeated sampling framework. We’ll focus on a simple linear regression with tmax as the response with tmin and prcp as the predictors, and are interested in the distribution of two quantities estimated from these data:
 
 r̂ 2
 log(β̂ 1∗β̂ 2)
+
 Use 5000 bootstrap samples and, for each bootstrap sample, produce estimates of these two quantities. Plot the distribution of your estimates, and describe these in words. Using the 5000 bootstrap estimates, identify the 2.5% and 97.5% quantiles to provide a 95% confidence interval for r̂ 2
  and log(β̂ 0∗β̂ 1)
 . Note: broom::glance() is helpful for extracting r̂ 2
  from a fitted regression, and broom::tidy() (with some additional wrangling) should help in computing log(β̂ 1∗β̂ 2)
-.
+
+```{r}
+weather_bootstrap_data = 
+weather_df |> 
+  modelr::bootstrap(n = 5000) |> 
+  mutate(
+    models = map(strap, \(df) lm(tmax ~ tmin + prcp, data = df)),
+    results_rsquare = map(models, broom::glance),
+    results_beta = map(models, broom::tidy)) |> 
+  select(results_rsquare, results_beta) |> 
+  mutate(
+    id = row_number()
+  ) |> 
+  unnest(results_rsquare) |> 
+  select(r.squared, results_beta, id) |> 
+  unnest(results_beta) |> 
+  select(id, r.squared, term, estimate) |> 
+  pivot_wider(names_from = term, values_from = estimate)
+
+log_beta_beta =
+  weather_bootstrap_data |> 
+  mutate(
+    beta_beta = tmin*prcp,
+    log_beta_beta = log(beta_beta)
+  )
+```
+
+```{r}
+testing = weather_df |> 
+  modelr::bootstrap(n = 100) |> 
+  mutate(models = map(strap, \(df) lm(tmax ~ tmin + prcp, data = df)),
+         results = map(models, broom::tidy)) |> 
+  select(results) |> 
+  mutate(
+    id = row_number()
+  ) |> 
+  unnest(results) |> 
+  select(id, term, estimate) |> 
+  pivot_wider(names_from = term, values_from = estimate)
+```
+
+
+```{r}
+
+```
 
 ## Problem 3
 In this problem, you will analyze data gathered to understand the effects of several variables on a child’s birthweight. This dataset, available here, consists of roughly 4000 children and includes the following variables:
